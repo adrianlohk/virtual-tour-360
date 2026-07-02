@@ -1,0 +1,15 @@
+{
+  "name": "virtual-tour-360",
+  "local_port": 53935,
+  "entrypoint": "bun run dev",
+  "publish": {
+    "label": "virtual-tour-360",
+    "type": "http",
+    "entrypoint": "bun run prod",
+    "published_port": 57980,
+    "env": {
+      "NODE_ENV": "production",
+      "ZO_CLIENT_IDENTITY_TOKEN": "none"
+    }
+  }
+}
