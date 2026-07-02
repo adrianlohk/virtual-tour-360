@@ -6,20 +6,28 @@ A web platform for building and sharing 360° virtual tours from Insta360 X3 ima
 
 - **Upload** equirectangular 360° images (JPG/PNG/WebP, 2:1 aspect ratio — Insta360 X3's native output)
 - **Auto-create** one scene per uploaded image
-- **Link scenes** together with scene-to-scene hotspots (the iconic "arrow" you click to walk into the next room)
+- **Link scenes** together with click-to-place scene hotspots — see the thumbnail, click where the door/opening is, done in one step
 - **Add info hotspots** anywhere on the panorama to label features ("Reception desk", "3D model", etc.)
 - **Visitor viewing page** with Google Street View-style controls (drag to look, scroll/pinch to zoom, mini-map, fullscreen, scene list)
-- **Admin editor** with click-to-place hotspots, scene reordering, and live preview
+- **Admin editor** with one-click hotspot placement, scene reordering, and live preview
 
 ## How to use
 
 1. Open the site and click **New tour**
 2. Give it a name and optional description
-3. From the editor, **drop 360° images** onto the upload area (or click to browse)
-4. For each scene, click **Add hotspot → Link to scene…** to create arrows that jump to other scenes
-5. Click **Add hotspot → Info hotspot** to add labeled info points
-6. Click any hotspot's pencil icon, then click the equirectangular preview to position it on the image
+3. From the editor, **drop 360° images** onto the upload area (or click to browse) — one scene per image
+4. For each scene, click **Add link**, then click the target thumbnail in the picker, then click the equirectangular preview where the door/opening is — done in one flow
+5. Click **Add info** to add labeled info points — just click the equirectangular preview where you want it
+6. Use the pencil icon on an existing hotspot to reposition it
 7. Click **Preview tour** to open the visitor view
+
+## The hotspot workflow (multi-point tours)
+
+This platform is built for non-linear, branching interior tours. There is no auto-link-in-order feature, because for multi-room spaces that would create a misleading chain. Instead, you build the connection graph explicitly:
+
+- Each scene can have **N outgoing links** (a hallway leads to three rooms, a door leads to one room, a window shows an exterior)
+- Each scene can have **N info hotspots** (label a feature, write a description, add a number)
+- Click-to-place means: no coordinates to type, no separate "edit position" step. You look at the equirectangular preview, see the door, click the door.
 
 ## Tech stack
 
@@ -37,7 +45,7 @@ src/
 │   ├── admin.tsx         # Tour editor (uploads, scene list, hotspot mgmt)
 │   └── tour-viewer.tsx   # 360° visitor view (Google Street View UX)
 ├── components/
-│   ├── scene-card.tsx    # Per-scene editor with equirectangular hotspot placement
+│   ├── scene-card.tsx    # Per-scene editor with click-to-place hotspots + scene picker with thumbnails
 │   └── ui/               # shadcn-style Button, Card, Badge
 ├── lib/
 │   ├── api.ts            # Typed fetch helpers
@@ -66,6 +74,11 @@ The admin editor shows each scene's equirectangular preview at 2:1 aspect. Click
 - `y: 0..1` → `pitch: 0.5π .. -0.5π`
 
 This matches Marzipano's coordinate system, so editor positions match the visitor view 1:1.
+
+### Hotspot workflow (new)
+- **Add link**: click button → thumbnail picker appears (showing all other scenes) → click target → click on equirectangular preview → hotspot created and placed in one round trip
+- **Add info**: click button → click on equirectangular preview → hotspot created with default title/text, editable inline
+- **Reposition**: click pencil icon on any hotspot → click on preview at new position → done
 
 ### Image constraints
 - Texture is capped at 4096px wide for memory. Insta360 X3 stitches to 5760x2880 (5.7K); 4K is a good balance of quality and load time.

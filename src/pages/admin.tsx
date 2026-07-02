@@ -111,6 +111,38 @@ export default function Admin() {
     await load();
   }
 
+  async function handleCreateAndPlaceSceneHotspot(
+    sceneId: string,
+    targetSceneId: string,
+    yaw: number,
+    pitch: number,
+  ) {
+    if (!tour) return;
+    await addHotspot(tour.id, sceneId, {
+      type: "scene",
+      yaw,
+      pitch,
+      targetSceneId,
+    });
+    await load();
+  }
+
+  async function handleCreateAndPlaceInfoHotspot(
+    sceneId: string,
+    yaw: number,
+    pitch: number,
+  ) {
+    if (!tour) return;
+    await addHotspot(tour.id, sceneId, {
+      type: "info",
+      yaw,
+      pitch,
+      title: "Info",
+      text: "Click edit to change this text.",
+    });
+    await load();
+  }
+
   async function handleDeleteHotspot(sceneId: string, hotspotId: string) {
     if (!tour) return;
     await deleteHotspot(tour.id, sceneId, hotspotId);
@@ -248,6 +280,12 @@ export default function Admin() {
                 onMoveDown={() => handleReorder(scene.id, 1)}
                 onAddSceneHotspot={(targetId) => handleAddSceneHotspot(scene.id, targetId)}
                 onAddInfoHotspot={() => handleAddInfoHotspot(scene.id)}
+                onCreateAndPlaceSceneHotspot={(targetId, yaw, pitch) =>
+                  handleCreateAndPlaceSceneHotspot(scene.id, targetId, yaw, pitch)
+                }
+                onCreateAndPlaceInfoHotspot={(yaw, pitch) =>
+                  handleCreateAndPlaceInfoHotspot(scene.id, yaw, pitch)
+                }
                 onDeleteHotspot={(hotspotId) => handleDeleteHotspot(scene.id, hotspotId)}
                 onUpdateHotspot={(hotspotId, patch) => handleUpdateHotspot(scene.id, hotspotId, patch)}
               />

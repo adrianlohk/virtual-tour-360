@@ -6,12 +6,11 @@ import {
   Link2,
   Info,
   Plus,
-  X,
   Save,
-  ChevronDown,
   Edit3,
-  Eye,
   Compass,
+  MousePointerClick,
+  X,
 } from "lucide-react";
 import type { Scene, Hotspot } from "@/lib/types";
 import { imageUrl } from "@/lib/api";
@@ -26,11 +25,17 @@ type Props = {
   onDelete: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  // Existing per-step API (for reposition, info hotspot, etc.)
   onAddSceneHotspot: (targetSceneId: string) => void;
   onAddInfoHotspot: () => void;
   onDeleteHotspot: (hotspotId: string) => void;
   onUpdateHotspot: (hotspotId: string, patch: Partial<Hotspot>) => void;
+  // New: create + place in one go
+  onCreateAndPlaceSceneHotspot: (targetSceneId: string, yaw: number, pitch: number) => void;
+  onCreateAndPlaceInfoHotspot: (yaw: number, pitch: number) => void;
 };
+
+type ToolMode = "off" | "link" | "info";
 
 export default function SceneCard({
   scene,
@@ -44,33 +49,75 @@ export default function SceneCard({
   onAddInfoHotspot,
   onDeleteHotspot,
   onUpdateHotspot,
+  onCreateAndPlaceSceneHotspot,
+  onCreateAndPlaceInfoHotspot,
 }: Props) {
   const [editingHotspot, setEditingHotspot] = useState<string | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
+  const [tool, setTool] = useState<ToolMode>("off");
+  const [pendingTarget, setPendingTarget] = useState<string | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
-  const previewRef = useRef<HTMLDivElement>(null);
 
   function pickPosition(e: React.MouseEvent<HTMLImageElement>) {
     if (!imgRef.current) return null;
     const rect = imgRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width; // 0..1
     const y = (e.clientY - rect.top) / rect.height; // 0..1
-    // equirectangular: yaw 0..2π, pitch π/2..-π/2
     const yaw = x * 2 * Math.PI;
     const pitch = (0.5 - y) * Math.PI;
     return { yaw, pitch };
   }
 
-  function handlePlaceHotspot(e: React.MouseEvent<HTMLImageElement>) {
-    if (!editingHotspot) return;
-    e.preventDefault();
-    const pos = pickPosition(e);
-    if (!pos) return;
-    onUpdateHotspot(editingHotspot, pos);
+  function handleImageClick(e: React.MouseEvent<HTMLImageElement>) {
+    if (editingHotspot) {
+      // Reposition an existing hotspot
+      e.preventDefault();
+      const pos = pickPosition(e);
+      if (!pos) return;
+      onUpdateHotspot(editingHotspot, pos);
+      setEditingHotspot(null);
+      return;
+    }
+    if (tool === "link" && pendingTarget) {
+      e.preventDefault();
+      const pos = pickPosition(e);
+      if (!pos) return;
+      onCreateAndPlaceSceneHotspot(pendingTarget, pos.yaw, pos.pitch);
+      setTool("off");
+      setPendingTarget(null);
+      return;
+    }
+    if (tool === "info") {
+      e.preventDefault();
+      const pos = pickPosition(e);
+      if (!pos) return;
+      onCreateAndPlaceInfoHotspot(pos.yaw, pos.pitch);
+      setTool("off");
+      return;
+    }
+  }
+
+  function startLinkTool() {
+    setTool((t) => (t === "link" ? "off" : "link"));
+    setPendingTarget(null);
     setEditingHotspot(null);
   }
 
+  function startInfoTool() {
+    setTool((t) => (t === "info" ? "off" : "info"));
+    setPendingTarget(null);
+    setEditingHotspot(null);
+  }
+
+  function cancelTool() {
+    setTool("off");
+    setPendingTarget(null);
+  }
+
   const otherScenes = allScenes.filter((s) => s.id !== scene.id);
+  const cursorClass =
+    editingHotspot || (tool === "link" && pendingTarget) || tool === "info"
+      ? "cursor-crosshair"
+      : "cursor-default";
 
   return (
     <Card>
@@ -125,11 +172,11 @@ export default function SceneCard({
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4">
           {/* Equirectangular image with hotspot overlay */}
           <div>
             <div className="text-xs text-zinc-500 mb-1.5 flex items-center gap-1">
-              <Compass className="w-3 h-3" /> Equirectangular preview (click to place hotspot)
+              <Compass className="w-3 h-3" /> Equirectangular preview — click to place hotspot
             </div>
             <div
               className="relative rounded-md overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900"
@@ -139,11 +186,9 @@ export default function SceneCard({
                 ref={imgRef}
                 src={imageUrl(scene.file)}
                 alt={scene.name}
-                className={`absolute inset-0 w-full h-full object-cover select-none ${
-                  editingHotspot ? "cursor-crosshair" : "cursor-default"
-                }`}
+                className={`absolute inset-0 w-full h-full object-cover select-none ${cursorClass}`}
                 draggable={false}
-                onClick={handlePlaceHotspot}
+                onClick={handleImageClick}
               />
               {scene.hotspots.map((h) => (
                 <HotspotMarker
@@ -153,34 +198,50 @@ export default function SceneCard({
                 />
               ))}
             </div>
-            {editingHotspot && (
-              <p className="mt-1.5 text-xs text-blue-600 dark:text-blue-400">
-                Click on the image to place this hotspot.
-                <button
-                  className="ml-2 underline"
-                  onClick={() => setEditingHotspot(null)}
-                >
-                  cancel
-                </button>
-              </p>
-            )}
+            <ToolHint
+              tool={tool}
+              editingHotspot={editingHotspot}
+              pendingTarget={pendingTarget}
+              otherScenes={otherScenes}
+              onCancel={cancelTool}
+            />
           </div>
 
           {/* Hotspots panel */}
           <div className="space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
-              <AddHotspotMenu
-                otherScenes={otherScenes}
-                onAddSceneHotspot={(id) => {
-                  onAddSceneHotspot(id);
-                }}
-                onAddInfoHotspot={onAddInfoHotspot}
-              />
+              <Button
+                size="sm"
+                variant={tool === "link" ? "default" : "outline"}
+                onClick={startLinkTool}
+                className="gap-1.5"
+                title="Add a navigation arrow to another scene"
+              >
+                <Link2 className="w-3.5 h-3.5" /> Add link
+              </Button>
+              <Button
+                size="sm"
+                variant={tool === "info" ? "default" : "outline"}
+                onClick={startInfoTool}
+                className="gap-1.5"
+                title="Add a labeled info point"
+              >
+                <Info className="w-3.5 h-3.5" /> Add info
+              </Button>
             </div>
+
+            {/* Scene picker (appears when "Add link" is active) */}
+            {tool === "link" && (
+              <ScenePicker
+                otherScenes={otherScenes}
+                selectedId={pendingTarget}
+                onSelect={setPendingTarget}
+              />
+            )}
 
             {scene.hotspots.length === 0 ? (
               <p className="text-xs text-zinc-500 italic py-2">
-                No hotspots yet. Add scene links to connect rooms, or info hotspots for descriptions.
+                No hotspots yet. Use "Add link" to connect rooms, or "Add info" to label features.
               </p>
             ) : (
               <div className="space-y-1.5">
@@ -203,20 +264,29 @@ export default function SceneCard({
                         ) : (
                           <Info className="w-3.5 h-3.5 mt-0.5 text-amber-500 flex-shrink-0" />
                         )}
-                        <div className="flex-1 min-w-0">
-                          {h.type === "scene" ? (
-                            <p className="font-medium truncate">
-                              → {target?.name ?? "(missing scene)"}
-                            </p>
-                          ) : (
-                            <p className="font-medium truncate">
-                              {h.title || "Info hotspot"}
-                            </p>
+                        <div className="flex-1 min-w-0 flex items-center gap-2">
+                          {h.type === "scene" && target && (
+                            <img
+                              src={imageUrl(target.file)}
+                              alt=""
+                              className="w-10 h-5 object-cover rounded flex-shrink-0"
+                            />
                           )}
-                          <p className="text-zinc-500">
-                            yaw {(h.yaw * (180 / Math.PI)).toFixed(0)}°, pitch{" "}
-                            {(h.pitch * (180 / Math.PI)).toFixed(0)}°
-                          </p>
+                          <div className="flex-1 min-w-0">
+                            {h.type === "scene" ? (
+                              <p className="font-medium truncate">
+                                → {target?.name ?? "(missing scene)"}
+                              </p>
+                            ) : (
+                              <p className="font-medium truncate">
+                                {h.title || "Info hotspot"}
+                              </p>
+                            )}
+                            <p className="text-zinc-500">
+                              yaw {(h.yaw * (180 / Math.PI)).toFixed(0)}°, pitch{" "}
+                              {(h.pitch * (180 / Math.PI)).toFixed(0)}°
+                            </p>
+                          </div>
                         </div>
                         <button
                           onClick={() =>
@@ -266,7 +336,7 @@ export default function SceneCard({
 
             {scene.hotspots.length >= 2 && (
               <p className="text-[11px] text-zinc-500 pt-1">
-                Tip: edit a hotspot to reposition, then click on the image to set its location.
+                Tip: click the pencil to reposition an existing hotspot, then click the image.
               </p>
             )}
           </div>
@@ -309,86 +379,112 @@ function HotspotMarker({
   );
 }
 
-function AddHotspotMenu({
+function ToolHint({
+  tool,
+  editingHotspot,
+  pendingTarget,
   otherScenes,
-  onAddSceneHotspot,
-  onAddInfoHotspot,
+  onCancel,
+}: {
+  tool: ToolMode;
+  editingHotspot: string | null;
+  pendingTarget: string | null;
+  otherScenes: Scene[];
+  onCancel: () => void;
+}) {
+  if (editingHotspot) {
+    return (
+      <p className="mt-1.5 text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+        <MousePointerClick className="w-3 h-3" />
+        Click on the image to move this hotspot.
+        <button className="ml-auto underline" onClick={onCancel}>
+          cancel
+        </button>
+      </p>
+    );
+  }
+  if (tool === "link") {
+    if (!pendingTarget) {
+      return (
+        <p className="mt-1.5 text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+          <MousePointerClick className="w-3 h-3" />
+          Pick the target scene on the right, then click where the door/opening is.
+          <button className="ml-auto underline" onClick={onCancel}>
+            cancel
+          </button>
+        </p>
+      );
+    }
+    const target = otherScenes.find((s) => s.id === pendingTarget);
+    return (
+      <p className="mt-1.5 text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+        <MousePointerClick className="w-3 h-3" />
+        Click on the image to drop the arrow into <strong>{target?.name}</strong>.
+        <button className="ml-auto underline" onClick={onCancel}>
+          cancel
+        </button>
+      </p>
+    );
+  }
+  if (tool === "info") {
+    return (
+      <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+        <MousePointerClick className="w-3 h-3" />
+        Click on the image to place an info hotspot. You can edit the label after.
+        <button className="ml-auto underline" onClick={onCancel}>
+          cancel
+        </button>
+      </p>
+    );
+  }
+  return null;
+}
+
+function ScenePicker({
+  otherScenes,
+  selectedId,
+  onSelect,
 }: {
   otherScenes: Scene[];
-  onAddSceneHotspot: (id: string) => void;
-  onAddInfoHotspot: () => void;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [sceneMenu, setSceneMenu] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handle(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-        setSceneMenu(false);
-      }
-    }
-    document.addEventListener("mousedown", handle);
-    return () => document.removeEventListener("mousedown", handle);
-  }, []);
-
+  if (otherScenes.length === 0) {
+    return (
+      <div className="p-3 rounded border border-dashed border-zinc-300 dark:border-zinc-700 text-xs text-zinc-500 italic">
+        Upload at least one other scene first.
+      </div>
+    );
+  }
   return (
-    <div ref={ref} className="relative">
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => setOpen(!open)}
-        className="gap-1.5"
-      >
-        <Plus className="w-3.5 h-3.5" /> Add hotspot
-        <ChevronDown className="w-3 h-3" />
-      </Button>
-      {open && (
-        <div className="absolute top-full mt-1 left-0 z-10 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md shadow-lg p-1 min-w-[180px]">
-          <div className="relative">
-            <button
-              className="w-full text-left px-2 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded flex items-center gap-1.5"
-              onClick={() => setSceneMenu(!sceneMenu)}
-            >
-              <Link2 className="w-3 h-3" /> Link to scene…
-              <ChevronDown className="w-3 h-3 ml-auto" />
-            </button>
-            {sceneMenu && (
-              <div className="absolute left-full top-0 ml-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md shadow-lg p-1 min-w-[180px] max-h-60 overflow-auto">
-                {otherScenes.length === 0 ? (
-                  <p className="px-2 py-1.5 text-xs text-zinc-500 italic">
-                    No other scenes yet
-                  </p>
-                ) : (
-                  otherScenes.map((s) => (
-                    <button
-                      key={s.id}
-                      className="w-full text-left px-2 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded"
-                      onClick={() => {
-                        onAddSceneHotspot(s.id);
-                        setOpen(false);
-                        setSceneMenu(false);
-                      }}
-                    >
-                      {s.name}
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
+    <div className="p-2 rounded border border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-950/20">
+      <p className="text-[11px] font-medium text-blue-700 dark:text-blue-300 mb-1.5">
+        Link to which scene?
+      </p>
+      <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto">
+        {otherScenes.map((s) => (
           <button
-            className="w-full text-left px-2 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded flex items-center gap-1.5"
-            onClick={() => {
-              onAddInfoHotspot();
-              setOpen(false);
-            }}
+            key={s.id}
+            onClick={() => onSelect(s.id)}
+            className={`group text-left rounded overflow-hidden border-2 transition-all ${
+              selectedId === s.id
+                ? "border-blue-500 ring-2 ring-blue-500/30"
+                : "border-zinc-200 dark:border-zinc-800 hover:border-blue-400"
+            }`}
           >
-            <Info className="w-3 h-3" /> Info hotspot
+            <div className="relative aspect-[2/1] bg-zinc-100 dark:bg-zinc-900">
+              <img
+                src={imageUrl(s.file)}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            </div>
+            <div className="px-1.5 py-1 bg-white dark:bg-zinc-900">
+              <p className="text-[11px] font-medium truncate">{s.name}</p>
+            </div>
           </button>
-        </div>
-      )}
+        ))}
+      </div>
     </div>
   );
 }
