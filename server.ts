@@ -110,10 +110,22 @@ app.get("/api/tours/:id", async (c) => {
 
 // Create a new tour
 app.post("/api/tours", async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as {
-    name?: string;
-    description?: string;
-  };
+  // Accept both JSON and multipart (FormData) so the home page
+  // quick-create form works without changing the public API contract.
+  const ct = c.req.header("content-type") || "";
+  let body: { name?: string; description?: string } = {};
+  if (ct.includes("application/json")) {
+    body = (await c.req.json().catch(() => ({}))) as typeof body;
+  } else if (
+    ct.includes("multipart/form-data") ||
+    ct.includes("application/x-www-form-urlencoded")
+  ) {
+    const fd = await c.req.formData().catch(() => null);
+    if (fd) {
+      body.name = (fd.get("name") as string | null) ?? undefined;
+      body.description = (fd.get("description") as string | null) ?? undefined;
+    }
+  }
   const name = (body.name || "").trim();
   if (!name) return c.json({ error: "Name is required" }, 400);
   const id = safeTourId(name) + "-" + randomUUID().slice(0, 6);

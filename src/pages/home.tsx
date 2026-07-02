@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Compass, Plus, Trash2, ArrowRight, MapPin } from "lucide-react";
-import { listTours, deleteTour } from "@/lib/api";
+import { listTours, createTour, deleteTour } from "@/lib/api";
 import type { TourSummary } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,16 +35,8 @@ export default function Home() {
     if (!name.trim()) return;
     setError(null);
     try {
-      const fd = new FormData();
-      fd.append("name", name);
-      fd.append("description", description);
-      const res = await fetch("/api/tours", {
-        method: "POST",
-        body: fd,
-      });
-      if (!res.ok) throw new Error("Failed to create");
-      const data = (await res.json()) as { tour: { id: string } };
-      navigate(`/admin/${data.tour.id}`);
+      const tour = await createTour(name, description);
+      navigate(`/admin/${tour.id}`);
     } catch (e) {
       setError((e as Error).message);
     }
