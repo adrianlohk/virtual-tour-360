@@ -75,6 +75,12 @@ export default function Admin() {
     await load();
   }
 
+  async function handleRenameScene(sceneId: string, name: string) {
+    if (!tour) return;
+    await updateScene(tour.id, sceneId, { name });
+    await load();
+  }
+
   async function handleReorder(sceneId: string, direction: -1 | 1) {
     if (!tour) return;
     const idx = tour.scenes.findIndex((s) => s.id === sceneId);
@@ -278,6 +284,7 @@ export default function Admin() {
                 onDelete={() => handleDeleteScene(scene.id)}
                 onMoveUp={() => handleReorder(scene.id, -1)}
                 onMoveDown={() => handleReorder(scene.id, 1)}
+                onRenameScene={(name) => handleRenameScene(scene.id, name)}
                 onAddSceneHotspot={(targetId) => handleAddSceneHotspot(scene.id, targetId)}
                 onAddInfoHotspot={() => handleAddInfoHotspot(scene.id)}
                 onCreateAndPlaceSceneHotspot={(targetId, yaw, pitch) =>

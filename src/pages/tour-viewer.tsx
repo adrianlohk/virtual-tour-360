@@ -119,6 +119,10 @@ export function TourViewer() {
       viewerRef.current.destroy();
       viewerRef.current = null;
     }
+    // Scenes belong to the previous viewer instance; drop the cache so they
+    // are recreated against the new viewer.
+    sceneMapRef.current.clear();
+    sceneRef.current = null;
 
     const viewer = new window.Marzipano.Viewer(containerRef.current, {
       controls: { mouseViewMode: "drag" },
@@ -128,6 +132,8 @@ export function TourViewer() {
     return () => {
       viewer.destroy();
       viewerRef.current = null;
+      sceneMapRef.current.clear();
+      sceneRef.current = null;
     };
   }, [tour, marzipanoReady]);
 

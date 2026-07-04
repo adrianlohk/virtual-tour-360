@@ -33,6 +33,7 @@ type Props = {
   // New: create + place in one go
   onCreateAndPlaceSceneHotspot: (targetSceneId: string, yaw: number, pitch: number) => void;
   onCreateAndPlaceInfoHotspot: (yaw: number, pitch: number) => void;
+  onRenameScene: (name: string) => void;
 };
 
 type ToolMode = "off" | "link" | "info";
@@ -51,6 +52,7 @@ export default function SceneCard({
   onUpdateHotspot,
   onCreateAndPlaceSceneHotspot,
   onCreateAndPlaceInfoHotspot,
+  onRenameScene,
 }: Props) {
   const [editingHotspot, setEditingHotspot] = useState<string | null>(null);
   const [tool, setTool] = useState<ToolMode>("off");
@@ -131,13 +133,9 @@ export default function SceneCard({
             className="font-medium bg-transparent flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-1"
             defaultValue={scene.name}
             key={scene.name}
-            onBlur={async (e) => {
+            onBlur={(e) => {
               if (e.target.value && e.target.value !== scene.name) {
-                await fetch(`/api/tours/_/scenes/${scene.id}`, {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ name: e.target.value }),
-                });
+                onRenameScene(e.target.value);
               }
             }}
           />
